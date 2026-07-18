@@ -1,5 +1,9 @@
 <div align="center">
 
+# ✍️📝  Sheets Time Tracker
+
+![Hand writing time tracker](screenshots/handwrite.jpg)
+
 # ⏱️ Premium Google Sheets Time Tracker
 
 ### 🚀 A Fully Automated Productivity Dashboard Built with Google Apps Script
