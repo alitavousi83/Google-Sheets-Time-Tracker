@@ -1,40 +1,58 @@
 /** ═══════════════════════════════════════════════════════════════════════════
- *  ⏱️  PREMIUM TIME TRACKER — automated Google Sheets builder
+ *  ⏱️  PREMIUM TIME TRACKER — automated Google Sheets builder  (v3)
  *  ───────────────────────────────────────────────────────────────────────────
  *  Builds a complete, fully-automated 5-sheet productivity tracker:
- *    📅 Week 1 … Week 4  — 30-min time grid (Mon–Sun × 48 blocks), dropdowns,
- *                          auto-coloring, daily to-do lists, live statistics,
- *                          8 charts, reflection journal
- *    📊 Monthly Dashboard — KPI cards, auto-aggregated summary, productivity
- *                          score + gauge, 8 charts, monthly reflection
+ *    📅 Week 1 … Week 4  — 30-min time grid (Sat–Fri × 48 blocks), dropdowns,
+ *                          auto-coloring, daily to-do lists, per-activity AND
+ *                          per-group statistics, 10 charts, reflection journal
+ *    📊 Monthly Dashboard — KPI cards by category group, activity & group
+ *                          summaries, productivity score + gauge, 10 charts
+ *
+ *  v3 changes: 12-activity system with category groups (Programming, English,
+ *  Exercises, Meditate, Work, Personal, Sleep, Wasted), Saturday-first weeks,
+ *  Friday-only weekend styling, no frozen rows/columns, refreshed Config goals.
  *
  *  HOW TO INSTALL
  *  1. Open a NEW blank Google Sheet  (sheets.new)
  *  2. Extensions ▸ Apps Script → delete any code there → paste THIS file
  *  3. Click 💾 Save, then select the function  buildTimeTracker  and press ▶ Run
- *  4. Authorize when asked (it only touches this spreadsheet), then wait
- *     ~60–90 seconds while it builds. Done!
+ *  4. Authorize when asked, then wait ~90 seconds while it builds. Done!
  *
- *  A custom menu  "⏱️ Time Tracker"  also appears after you reload the sheet:
- *    🔄 Build / Rebuild   🧹 Clear time entries   🧹 Clear to-dos
- *
- *  CUSTOMIZING
- *  • Score goals (programming/exercise/… targets) live on the hidden
- *    "⚙️ Config" sheet — right-click any tab ▸ show sheet ▸ edit values.
- *  • To change activities or colors, edit ACTIVITIES below and re-run
- *    buildTimeTracker (rebuild wipes entered data — export first!).
+ *  A custom menu  "⏱️ Time Tracker"  also appears after you reload the sheet.
+ *  Score goals are editable on the hidden "⚙️ Config" sheet.
  *  ═══════════════════════════════════════════════════════════════════════════ */
 
 const ACTIVITIES = [
-  { name: 'Sleep',          emoji: '😴', color: '#4285F4', text: '#FFFFFF' },
-  { name: 'Programming',    emoji: '💻', color: '#34A853', text: '#FFFFFF' },
-  { name: 'Exercise',       emoji: '🏋️', color: '#FF8F00', text: '#FFFFFF' },
-  { name: 'Meditation',     emoji: '🧘', color: '#9C27B0', text: '#FFFFFF' },
-  { name: 'Personal Tasks', emoji: '📋', color: '#FBBC04', text: '#5F4B00' },
-  { name: 'Wasted Time',    emoji: '⌛', color: '#EA4335', text: '#FFFFFF' },
+  { name: 'codding',         emoji: '💻', color: '#057c31', text: '#FFFFFF' },
+  { name: 'learn-prog',      emoji: '💻', color: '#86EFAC', text: '#FFFFFF' },
+  { name: 'En-book',         emoji: '📚', color: '#2563EB', text: '#FFFFFF' },
+  { name: 'En-listening',    emoji: '📚', color: '#93C5FD', text: '#FFFFFF' },
+  { name: 'Run',             emoji: '🏋️', color: '#EA580C', text: '#FFFFFF' },
+  { name: 'Gym',             emoji: '🏋️', color: '#FDBA74', text: '#FFFFFF' },
+  { name: 'work',            emoji: '🧑‍💻', color: '#89fd05', text: '#FFFFFF' },
+  { name: 'Meditation',      emoji: '🧘', color: '#8e029b', text: '#FFFFFF' },
+  { name: 'Setar',           emoji: '🧘', color: '#da87de', text: '#FFFFFF' },
+  { name: 'Personal Tasks',  emoji: '📋', color: '#eeeeee', text: '#5F4B00' },
+  { name: 'Wasted Time',     emoji: '⌛', color: '#ff1500', text: '#FFFFFF' },
+  { name: 'Sleep',           emoji: '😴', color: '#4e4d44', text: '#FFFFFF' },
 ];
 
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+// Category groups — members are indexes into ACTIVITIES.
+// Individual activities keep their own rows/columns everywhere; groups add
+// combined statistics, KPI cards, grouped charts and the productivity score.
+const GROUPS = [
+  { name: 'Programming',    emoji: '💻', members: [0, 1],  color: '#057c31' },
+  { name: 'English',        emoji: '📚', members: [2, 3],  color: '#2563EB' },
+  { name: 'Exercises',      emoji: '🏋️', members: [4, 5],  color: '#EA580C' },
+  { name: 'Meditate',       emoji: '🧘', members: [7, 8],  color: '#8e029b' },
+  { name: 'Work',           emoji: '🧑‍💻', members: [6],    color: '#89fd05' },
+  { name: 'Personal Tasks', emoji: '📋', members: [9],     color: '#eeeeee' },
+  { name: 'Sleep',          emoji: '😴', members: [11],    color: '#4e4d44' },
+  { name: 'Wasted Time',    emoji: '⌛', members: [10],    color: '#ff1500' },
+];
+
+// Week starts on Saturday; Friday (last row) is the only weekend day
+const DAYS = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
 const THEME = {
   bg: '#F4F6FB',        banner: '#141E3C',    nav: '#1E2A52',
@@ -58,8 +76,9 @@ const HOUR_BANDS = [
 
 const DASH_NAME = '📊 Monthly Dashboard';
 const CFG_NAME  = '⚙️ Config';
-const NAMED = ['ACTIVITIES', 'GOAL_PROG', 'GOAL_EXERCISE', 'GOAL_MEDITATION',
-               'GOAL_PERSONAL', 'IDEAL_SLEEP', 'WASTED_LIMIT',
+const NAMED = ['ACTIVITIES', 'GOAL_PROG', 'GOAL_ENGLISH', 'GOAL_EXERCISE',
+               'GOAL_MEDITATION', 'GOAL_WORK', 'GOAL_PERSONAL',
+               'IDEAL_SLEEP', 'WASTED_LIMIT',
                'WEEK1_GRID', 'WEEK2_GRID', 'WEEK3_GRID', 'WEEK4_GRID'];
 
 /* ══════════════════════════ MENU ══════════════════════════ */
@@ -123,12 +142,14 @@ function buildConfigSheet(ss) {
 
   sh.getRange('D1').setValue('Productivity-score goals (editable)').setFontWeight('bold');
   const goals = [
-    ['Monthly programming goal (hours)',    80, 'GOAL_PROG'],
-    ['Monthly exercise goal (hours)',       20, 'GOAL_EXERCISE'],
-    ['Monthly meditation goal (hours)',     12, 'GOAL_MEDITATION'],
-    ['Monthly personal-tasks goal (hours)', 40, 'GOAL_PERSONAL'],
-    ['Ideal sleep per day (hours)',          8, 'IDEAL_SLEEP'],
-    ['Wasted-time limit per month (hours)', 40, 'WASTED_LIMIT'],
+    ['Monthly Programming goal (codding + learn-prog, hours)', 60, 'GOAL_PROG'],
+    ['Monthly English goal (En-book + En-listening, hours)',   30, 'GOAL_ENGLISH'],
+    ['Monthly Exercise goal (Run + Gym, hours)',               20, 'GOAL_EXERCISE'],
+    ['Monthly Meditate goal (Meditation + Setar, hours)',      15, 'GOAL_MEDITATION'],
+    ['Monthly Work goal (hours)',                              80, 'GOAL_WORK'],
+    ['Monthly Personal Tasks goal (hours)',                    30, 'GOAL_PERSONAL'],
+    ['Ideal sleep per day (hours)',                             8, 'IDEAL_SLEEP'],
+    ['Wasted-time limit per month (hours)',                    40, 'WASTED_LIMIT'],
   ];
   goals.forEach((g, i) => {
     sh.getRange(2 + i, 4).setValue(g[0]);
@@ -137,7 +158,7 @@ function buildConfigSheet(ss) {
   });
   ss.setNamedRange('ACTIVITIES', sh.getRange('A2:A' + (1 + ACTIVITIES.length)));
 
-  sh.setColumnWidth(4, 260);
+  sh.setColumnWidth(4, 340);
   sh.hideSheet();
   return sh;
 }
@@ -148,14 +169,14 @@ function buildWeekSheet(ss, cfg, w) {
   const sh = ss.insertSheet('Week ' + w);
   sh.setTabColor(WEEK_TABS[w - 1]);
 
-  // ---- canvas size: 130 rows × 64 cols ----
-  if (sh.getMaxColumns() < 64) sh.insertColumnsAfter(sh.getMaxColumns(), 64 - sh.getMaxColumns());
-  if (sh.getMaxColumns() > 64) sh.deleteColumns(65, sh.getMaxColumns() - 64);
-  if (sh.getMaxRows() > 130) sh.deleteRows(131, sh.getMaxRows() - 130);
-  if (sh.getMaxRows() < 130) sh.insertRowsAfter(sh.getMaxRows(), 130 - sh.getMaxRows());
+  // ---- canvas size: 160 rows × 70 cols ----
+  if (sh.getMaxColumns() < 70) sh.insertColumnsAfter(sh.getMaxColumns(), 70 - sh.getMaxColumns());
+  if (sh.getMaxColumns() > 70) sh.deleteColumns(71, sh.getMaxColumns() - 70);
+  if (sh.getMaxRows() > 160) sh.deleteRows(161, sh.getMaxRows() - 160);
+  if (sh.getMaxRows() < 160) sh.insertRowsAfter(sh.getMaxRows(), 160 - sh.getMaxRows());
 
   sh.setHiddenGridlines(true);
-  sh.getRange(1, 1, 130, 64).setBackground(THEME.bg)
+  sh.getRange(1, 1, 160, 70).setBackground(THEME.bg)
     .setFontFamily(THEME.font).setFontColor('#1F2937').setFontSize(10);
 
   // ---- column widths ----
@@ -168,9 +189,9 @@ function buildWeekSheet(ss, cfg, w) {
   sh.setColumnWidth(54, 250);          // BB notes
   sh.setColumnWidth(55, 20);           // BC spacer
   sh.setColumnWidth(56, 96);           // BD day (breakdown)
-  sh.setColumnWidths(57, 6, 100);      // BE..BJ activities
-  sh.setColumnWidth(63, 80);           // BK total
-  sh.setColumnWidth(64, 16);           // BL spacer
+  sh.setColumnWidths(57, 12, 85);      // BE..BP  12 activities
+  sh.setColumnWidth(69, 80);           // BQ total
+  sh.setColumnWidth(70, 16);           // BR spacer
 
   // ---- row heights ----
   sh.setRowHeight(1, 50); sh.setRowHeight(2, 28); sh.setRowHeight(3, 30);
@@ -213,9 +234,9 @@ function buildWeekSheet(ss, cfg, w) {
     .setBackground('#FFFFFF').setFontColor(THEME.muted).setFontSize(7)
     .setHorizontalAlignment('center');
 
-  // day labels
+  // day labels — Friday is the only weekend day
   DAYS.forEach((d, i) => {
-    const c = i >= 5 ? THEME.weekend : THEME.weekday;
+    const c = d === 'Friday' ? THEME.weekend : THEME.weekday;
     sh.getRange(6 + i, 2).setValue(d).setBackground(c.bg).setFontColor(c.fg)
       .setFontWeight('bold').setHorizontalAlignment('center').setVerticalAlignment('middle');
   });
@@ -235,17 +256,18 @@ function buildWeekSheet(ss, cfg, w) {
     THEME.border, SpreadsheetApp.BorderStyle.SOLID);
   sh.getRange(6, 3).setNote('⏱️ Click any cell and pick an activity from the dropdown.\nEach cell = 30 minutes. Colors apply automatically.');
 
-  // legend chips (row 14)
+  // legend chips (row 14) — 12 chips × 4 columns
   sh.getRange(14, 2).setValue('🎨 Legend').setFontWeight('bold')
     .setFontColor(THEME.muted).setFontSize(9).setVerticalAlignment('middle');
   ACTIVITIES.forEach((a, i) => {
-    sh.getRange(14, 3 + i * 8, 1, 6).merge()
+    sh.getRange(14, 3 + i * 4, 1, 4).merge()
       .setValue(a.emoji + ' ' + a.name)
       .setBackground(a.color).setFontColor(a.text).setFontWeight('bold')
-      .setFontSize(9).setHorizontalAlignment('center').setVerticalAlignment('middle');
+      .setFontSize(8).setHorizontalAlignment('center').setVerticalAlignment('middle')
+      .setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
   });
 
-  /* ─────────── 2. WEEKLY STATISTICS & SUMMARY  (rows 16–25) ─────────── */
+  /* ─────────── 2. WEEKLY STATISTICS & SUMMARY  (rows 16–31) ─────────── */
 
   sectionBar(sh, 16, 2, 18, '📊 Weekly Statistics & Summary  (auto-calculated)');
 
@@ -257,8 +279,8 @@ function buildWeekSheet(ss, cfg, w) {
   });
 
   ACTIVITIES.forEach((a, i) => {
-    const r = 18 + i;
-    sh.setRowHeight(r, 26);
+    const r = 18 + i;                            // rows 18–29
+    sh.setRowHeight(r, 24);
     sh.getRange(r, 2, 1, 4).merge().setValue(a.emoji + ' ' + a.name)
       .setBackground('#FFFFFF').setFontWeight('bold').setVerticalAlignment('middle');
     sh.getRange(r, 6, 1, 3).merge()
@@ -269,31 +291,58 @@ function buildWeekSheet(ss, cfg, w) {
       .setNumberFormat('0.0%').setBackground('#FFFFFF').setFontColor(THEME.muted)
       .setHorizontalAlignment('center').setVerticalAlignment('middle');
     sh.getRange(r, 12, 1, 7).merge()
-      .setFormula('=IFERROR(SPARKLINE($F$' + r + ',{"charttype","bar";"max",MAX($F$18:$F$23)+0.0001;"color1","' + a.color + '"}),"")')
+      .setFormula('=IFERROR(SPARKLINE($F$' + r + ',{"charttype","bar";"max",MAX($F$18:$F$29)+0.0001;"color1","' + a.color + '"}),"")')
       .setBackground('#FFFFFF').setVerticalAlignment('middle');
   });
-  // totals
-  sh.setRowHeight(24, 26); sh.setRowHeight(25, 24);
-  sh.getRange(24, 2, 1, 4).merge().setValue('Σ Total Tracked').setFontWeight('bold')
+  // totals (rows 30–31)
+  sh.setRowHeight(30, 26); sh.setRowHeight(31, 24);
+  sh.getRange(30, 2, 1, 4).merge().setValue('Σ Total Tracked').setFontWeight('bold')
     .setBackground(THEME.totalRow).setVerticalAlignment('middle');
-  sh.getRange(24, 6, 1, 3).merge().setFormula('=SUM($F$18:$F$23)').setNumberFormat('0.0')
+  sh.getRange(30, 6, 1, 3).merge().setFormula('=SUM($F$18:$F$29)').setNumberFormat('0.0')
     .setFontWeight('bold').setBackground(THEME.totalRow).setHorizontalAlignment('center').setVerticalAlignment('middle');
-  sh.getRange(24, 9, 1, 3).merge().setFormula('=$F$24/168').setNumberFormat('0.0%')
+  sh.getRange(30, 9, 1, 3).merge().setFormula('=$F$30/168').setNumberFormat('0.0%')
     .setFontWeight('bold').setBackground(THEME.totalRow).setHorizontalAlignment('center').setVerticalAlignment('middle');
-  sh.getRange(24, 12, 1, 7).merge().setBackground(THEME.totalRow);
-  sh.getRange(25, 2, 1, 4).merge().setValue('⬜ Untracked').setFontColor(THEME.muted)
+  sh.getRange(30, 12, 1, 7).merge().setBackground(THEME.totalRow);
+  sh.getRange(31, 2, 1, 4).merge().setValue('⬜ Untracked').setFontColor(THEME.muted)
     .setBackground('#FFFFFF').setVerticalAlignment('middle');
-  sh.getRange(25, 6, 1, 3).merge().setFormula('=168-$F$24').setNumberFormat('0.0')
+  sh.getRange(31, 6, 1, 3).merge().setFormula('=168-$F$30').setNumberFormat('0.0')
     .setFontColor(THEME.muted).setBackground('#FFFFFF').setHorizontalAlignment('center').setVerticalAlignment('middle');
-  sh.getRange(25, 9, 1, 3).merge().setFormula('=$F$25/168').setNumberFormat('0.0%')
+  sh.getRange(31, 9, 1, 3).merge().setFormula('=$F$31/168').setNumberFormat('0.0%')
     .setFontColor(THEME.muted).setBackground('#FFFFFF').setHorizontalAlignment('center').setVerticalAlignment('middle');
-  sh.getRange(25, 12, 1, 7).merge().setBackground('#FFFFFF');
-  sh.getRange(17, 2, 9, 17).setBorder(true, true, true, true, true, true,
+  sh.getRange(31, 12, 1, 7).merge().setBackground('#FFFFFF');
+  sh.getRange(17, 2, 15, 17).setBorder(true, true, true, true, true, true,
     THEME.border, SpreadsheetApp.BorderStyle.SOLID);
 
-  /* ─────────── 3. WEEKLY REFLECTION  (rows 27–52) ─────────── */
+  /* ─────────── 3. CATEGORY GROUPS  (rows 33–42) ─────────── */
 
-  sectionBar(sh, 27, 2, 18, '🧠 Weekly Reflection');
+  sectionBar(sh, 33, 2, 18, '📦 Category Groups  (combined totals — activities stay tracked individually)');
+  headSpans.forEach(hs => {
+    sh.getRange(34, hs[0], 1, hs[1]).merge().setValue(hs[2] === 'Activity' ? 'Group' : hs[2])
+      .setBackground(THEME.subHead).setFontColor(THEME.subHeadText).setFontWeight('bold')
+      .setHorizontalAlignment('center').setVerticalAlignment('middle');
+  });
+  GROUPS.forEach((g, i) => {
+    const r = 35 + i;                            // rows 35–42
+    sh.setRowHeight(r, 24);
+    const sum = '=' + g.members.map(m => 'F' + (18 + m)).join('+');
+    sh.getRange(r, 2, 1, 4).merge().setValue(g.emoji + ' ' + g.name)
+      .setBackground('#FFFFFF').setFontWeight('bold').setVerticalAlignment('middle');
+    sh.getRange(r, 6, 1, 3).merge().setFormula(sum)
+      .setNumberFormat('0.0').setBackground('#FFFFFF').setFontWeight('bold')
+      .setHorizontalAlignment('center').setVerticalAlignment('middle');
+    sh.getRange(r, 9, 1, 3).merge().setFormula('=$F$' + r + '/168')
+      .setNumberFormat('0.0%').setBackground('#FFFFFF').setFontColor(THEME.muted)
+      .setHorizontalAlignment('center').setVerticalAlignment('middle');
+    sh.getRange(r, 12, 1, 7).merge()
+      .setFormula('=IFERROR(SPARKLINE($F$' + r + ',{"charttype","bar";"max",MAX($F$35:$F$42)+0.0001;"color1","' + g.color + '"}),"")')
+      .setBackground('#FFFFFF').setVerticalAlignment('middle');
+  });
+  sh.getRange(34, 2, 9, 17).setBorder(true, true, true, true, true, true,
+    THEME.border, SpreadsheetApp.BorderStyle.SOLID);
+
+  /* ─────────── 4. WEEKLY REFLECTION  (rows 44–69) ─────────── */
+
+  sectionBar(sh, 44, 2, 18, '🧠 Weekly Reflection');
   const reflections = [
     ['🏆 Wins This Week', 'What went well?'],
     ['⚔️ Challenges', 'What problems did I face?'],
@@ -302,7 +351,7 @@ function buildWeekSheet(ss, cfg, w) {
     ['📝 Personal Notes', 'Free writing space'],
   ];
   reflections.forEach((sec, i) => {
-    const r = 29 + i * 5;
+    const r = 46 + i * 5;
     sh.getRange(r, 2, 1, 17).merge().setValue(sec[0] + '  ·  ' + sec[1])
       .setBackground(THEME.subHead).setFontColor(THEME.subHeadText)
       .setFontWeight('bold').setVerticalAlignment('middle');
@@ -313,7 +362,7 @@ function buildWeekSheet(ss, cfg, w) {
       .setNote('✍️ Write here');
   });
 
-  /* ─────────── 4. DAILY TO-DO LIST  (right zone, AZ–BB) ─────────── */
+  /* ─────────── 5. DAILY TO-DO LIST  (right zone, AZ–BB) ─────────── */
 
   sh.getRange(3, 52, 1, 3).merge().setValue('✅ Daily To-Do List')
     .setBackground(THEME.section).setFontColor('#FFFFFF').setFontWeight('bold')
@@ -321,7 +370,7 @@ function buildWeekSheet(ss, cfg, w) {
 
   DAYS.forEach((d, i) => {
     const hr = 4 + i * 5;                       // day header row
-    const c = i >= 5 ? THEME.weekend : THEME.weekday;
+    const c = d === 'Friday' ? THEME.weekend : THEME.weekday;
     sh.getRange(hr, 52, 1, 3).merge().setValue('📅 ' + d)
       .setBackground(c.bg).setFontColor(c.fg).setFontWeight('bold').setVerticalAlignment('middle');
     sh.getRange(hr + 1, 52, 4, 3).setBackground('#FFFFFF')
@@ -332,37 +381,37 @@ function buildWeekSheet(ss, cfg, w) {
     THEME.border, SpreadsheetApp.BorderStyle.SOLID);
   sh.getRange(5, 53).setNote('Type a task here; the ✓ box grays it out automatically.\nColumn to the right = optional notes.');
 
-  /* ─────────── 5. DAILY BREAKDOWN (chart feed, BD–BK) ─────────── */
+  /* ─────────── 6. DAILY BREAKDOWN (chart feed, BD–BQ) ─────────── */
 
-  sh.getRange(3, 56, 1, 8).merge().setValue('📅 Daily Breakdown — hours per activity (auto)')
+  sh.getRange(3, 56, 1, 14).merge().setValue('📅 Daily Breakdown — hours per activity (auto)')
     .setBackground(THEME.section).setFontColor('#FFFFFF').setFontWeight('bold')
     .setFontSize(11).setVerticalAlignment('middle');
 
   const bh = [['Day'].concat(ACTIVITIES.map(a => a.emoji + ' ' + a.name)).concat(['Σ Total'])];
-  sh.getRange(4, 56, 1, 8).setValues(bh)
+  sh.getRange(4, 56, 1, 14).setValues(bh)
     .setBackground(THEME.subHead).setFontColor(THEME.subHeadText).setFontWeight('bold')
     .setFontSize(9).setHorizontalAlignment('center').setVerticalAlignment('middle')
     .setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
 
   DAYS.forEach((d, i) => {
     const r = 5 + i, gr = 6 + i;                // breakdown row, grid row
-    const c = i >= 5 ? THEME.weekend : THEME.weekday;
+    const c = d === 'Friday' ? THEME.weekend : THEME.weekday;
     sh.getRange(r, 56).setValue(d).setBackground(c.bg).setFontColor(c.fg).setFontWeight('bold');
     ACTIVITIES.forEach((a, j) => {
       sh.getRange(r, 57 + j)
         .setFormula('=COUNTIF($C$' + gr + ':$AX$' + gr + ',"' + a.name + '")*0.5')
         .setNumberFormat('0.0').setBackground('#FFFFFF').setHorizontalAlignment('center');
     });
-    sh.getRange(r, 63).setFormula('=SUM(BE' + r + ':BJ' + r + ')')
+    sh.getRange(r, 69).setFormula('=SUM(BE' + r + ':BP' + r + ')')
       .setNumberFormat('0.0').setFontWeight('bold').setBackground('#FFFFFF').setHorizontalAlignment('center');
   });
   sh.getRange(12, 56).setValue('Σ Week').setFontWeight('bold').setBackground(THEME.totalRow);
-  for (let j = 0; j < 7; j++) {
+  for (let j = 0; j < 13; j++) {
     const col = 57 + j, letter = colA1(col);
     sh.getRange(12, col).setFormula('=SUM(' + letter + '5:' + letter + '11)')
       .setNumberFormat('0.0').setFontWeight('bold').setBackground(THEME.totalRow).setHorizontalAlignment('center');
   }
-  sh.getRange(4, 56, 9, 8).setBorder(true, true, true, true, true, true,
+  sh.getRange(4, 56, 9, 14).setBorder(true, true, true, true, true, true,
     THEME.border, SpreadsheetApp.BorderStyle.SOLID);
 
   /* ─────────── CONDITIONAL FORMATTING ─────────── */
@@ -381,24 +430,35 @@ function buildWeekSheet(ss, cfg, w) {
     .setRanges([sh.getRange(4, 52, 35, 3)]).build());
   sh.setConditionalFormatRules(rules);
 
-  /* ─────────── FREEZE + CHARTS ─────────── */
+  // no frozen rows or columns anywhere
+  sh.setFrozenRows(0);
+  sh.setFrozenColumns(0);
 
-  // freeze the header rows only — the banner/stats merges span column B,
-  // so a column freeze through them is rejected by Sheets
-  sh.setFrozenRows(5);
-
+  /* ─────────── WEEKLY CHARTS (10) ─────────── */
+  // breakdown columns: BE codding, BF learn-prog, BG En-book, BH En-listening,
+  // BI Run, BJ Gym, BK work, BL Meditation, BM Setar, BN Personal, BO Wasted, BP Sleep
   const dayCat = 'BD4:BD11';
   addCharts(sh, [
-    { title: '💻 Daily Programming Hours',  ranges: [dayCat, 'BF4:BF11'], type: 'column', colors: ['#34A853'], row: 55,  col: 2,  vTitle: 'Hours' },
-    { title: '😴 Daily Sleep Hours',        ranges: [dayCat, 'BE4:BE11'], type: 'column', colors: ['#4285F4'], row: 55,  col: 20, vTitle: 'Hours' },
-    { title: '🏋️ Daily Exercise Hours',     ranges: [dayCat, 'BG4:BG11'], type: 'column', colors: ['#FF8F00'], row: 71,  col: 2,  vTitle: 'Hours' },
-    { title: '🧘 Daily Meditation Hours',   ranges: [dayCat, 'BH4:BH11'], type: 'column', colors: ['#9C27B0'], row: 71,  col: 20, vTitle: 'Hours' },
-    { title: '📋 Daily Personal Tasks Hours', ranges: [dayCat, 'BI4:BI11'], type: 'column', colors: ['#FBBC04'], row: 87, col: 2,  vTitle: 'Hours' },
-    { title: '⌛ Daily Wasted Time Hours',  ranges: [dayCat, 'BJ4:BJ11'], type: 'column', colors: ['#EA4335'], row: 87,  col: 20, vTitle: 'Hours' },
-    { title: '🥧 Weekly Activity Distribution', ranges: ['B18:B23', 'F18:F23'], type: 'pie', headers: 0,
-      colors: ACTIVITIES.map(a => a.color), row: 103, col: 2, legend: 'right' },
-    { title: '📈 Weekly Productivity Trend — how each day was spent', ranges: ['BD4:BJ11'], type: 'column',
-      stacked: true, colors: ACTIVITIES.map(a => a.color), row: 103, col: 20, legend: 'bottom', vTitle: 'Hours' },
+    { title: '💻 Programming — codding + learn-prog (daily)', ranges: ['BD4:BF11'], type: 'column',
+      stacked: true, colors: ['#057c31', '#86EFAC'], row: 72, col: 2, legend: 'bottom', vTitle: 'Hours' },
+    { title: '📚 English — En-book + En-listening (daily)', ranges: [dayCat, 'BG4:BH11'], type: 'column',
+      stacked: true, colors: ['#2563EB', '#93C5FD'], row: 72, col: 20, legend: 'bottom', vTitle: 'Hours' },
+    { title: '🏋️ Exercises — Run + Gym (daily)', ranges: [dayCat, 'BI4:BJ11'], type: 'column',
+      stacked: true, colors: ['#EA580C', '#FDBA74'], row: 88, col: 2, legend: 'bottom', vTitle: 'Hours' },
+    { title: '🧘 Meditate — Meditation + Setar (daily)', ranges: [dayCat, 'BL4:BM11'], type: 'column',
+      stacked: true, colors: ['#8e029b', '#da87de'], row: 88, col: 20, legend: 'bottom', vTitle: 'Hours' },
+    { title: '🧑‍💻 Daily Work Hours', ranges: [dayCat, 'BK4:BK11'], type: 'column',
+      colors: ['#89fd05'], row: 104, col: 2, vTitle: 'Hours' },
+    { title: '😴 Daily Sleep Hours', ranges: [dayCat, 'BP4:BP11'], type: 'column',
+      colors: ['#4e4d44'], row: 104, col: 20, vTitle: 'Hours' },
+    { title: '📋 Daily Personal Tasks Hours', ranges: [dayCat, 'BN4:BN11'], type: 'column',
+      colors: ['#CFCFCF'], row: 120, col: 2, vTitle: 'Hours' },
+    { title: '⌛ Daily Wasted Time Hours', ranges: [dayCat, 'BO4:BO11'], type: 'column',
+      colors: ['#ff1500'], row: 120, col: 20, vTitle: 'Hours' },
+    { title: '🥧 Weekly Activity Distribution', ranges: ['B18:B29', 'F18:F29'], type: 'pie', headers: 0,
+      colors: ACTIVITIES.map(a => a.color), row: 136, col: 2, legend: 'right' },
+    { title: '📈 Weekly Productivity Trend — how each day was spent', ranges: ['BD4:BP11'], type: 'column',
+      stacked: true, colors: ACTIVITIES.map(a => a.color), row: 136, col: 20, legend: 'bottom', vTitle: 'Hours' },
   ]);
 
   return sh;
@@ -410,13 +470,13 @@ function buildDashboardSheet(ss) {
   const sh = ss.insertSheet(DASH_NAME);
   sh.setTabColor('#4F46E5');
 
-  // canvas: 152 rows × 21 cols
+  // canvas: 178 rows × 21 cols
   if (sh.getMaxColumns() > 21) sh.deleteColumns(22, sh.getMaxColumns() - 21);
-  if (sh.getMaxRows() > 152) sh.deleteRows(153, sh.getMaxRows() - 152);
-  if (sh.getMaxRows() < 152) sh.insertRowsAfter(sh.getMaxRows(), 152 - sh.getMaxRows());
+  if (sh.getMaxRows() > 178) sh.deleteRows(179, sh.getMaxRows() - 178);
+  if (sh.getMaxRows() < 178) sh.insertRowsAfter(sh.getMaxRows(), 178 - sh.getMaxRows());
 
   sh.setHiddenGridlines(true);
-  sh.getRange(1, 1, 152, 21).setBackground(THEME.bg)
+  sh.getRange(1, 1, 178, 21).setBackground(THEME.bg)
     .setFontFamily(THEME.font).setFontColor('#1F2937').setFontSize(10);
 
   sh.setColumnWidth(1, 16);
@@ -433,17 +493,18 @@ function buildDashboardSheet(ss) {
     .setFontSize(16).setVerticalAlignment('middle');
   sh.getRange(2, 2, 1, 19).merge().setBackground(THEME.nav).setVerticalAlignment('middle');
 
-  /* ─────────── KPI CARDS (rows 4–10) ─────────── */
+  /* ─────────── KPI CARDS (rows 4–10) — one per category group + score ─────────── */
+  // group totals live in the Group Summary table: G31..G38
 
   const cards = [
-    { label: '💻 Programming',    f: '=$G$16', fmt: '0.0" h"', bg: '#34A853', fg: '#FFFFFF' },
-    { label: '😴 Sleep',          f: '=$G$15', fmt: '0.0" h"', bg: '#4285F4', fg: '#FFFFFF' },
-    { label: '🏋️ Exercise',       f: '=$G$17', fmt: '0.0" h"', bg: '#FF8F00', fg: '#FFFFFF' },
-    { label: '🧘 Meditation',     f: '=$G$18', fmt: '0.0" h"', bg: '#9C27B0', fg: '#FFFFFF' },
-    { label: '📋 Personal Tasks', f: '=$G$19', fmt: '0.0" h"', bg: '#FBBC04', fg: '#5F4B00' },
-    { label: '⌛ Wasted Time',    f: '=$G$20', fmt: '0.0" h"', bg: '#EA4335', fg: '#FFFFFF' },
-    { label: '🏆 Productivity Score', f: '=$H$31', fmt: '0" / 100"', bg: '#4F46E5', fg: '#FFFFFF' },
-    { label: '⚡ Avg Productive / Day', f: '=$E$32', fmt: '0.00" h"', bg: '#0D9488', fg: '#FFFFFF' },
+    { label: '💻 Programming', f: '=$G$31', fmt: '0.0" h"', bg: '#057c31', fg: '#FFFFFF' },
+    { label: '📚 English',     f: '=$G$32', fmt: '0.0" h"', bg: '#2563EB', fg: '#FFFFFF' },
+    { label: '🏋️ Exercises',   f: '=$G$33', fmt: '0.0" h"', bg: '#EA580C', fg: '#FFFFFF' },
+    { label: '🧘 Meditate',    f: '=$G$34', fmt: '0.0" h"', bg: '#8e029b', fg: '#FFFFFF' },
+    { label: '🧑‍💻 Work',        f: '=$G$35', fmt: '0.0" h"', bg: '#89fd05', fg: '#FFFFFF' },
+    { label: '😴 Sleep',       f: '=$G$37', fmt: '0.0" h"', bg: '#4e4d44', fg: '#FFFFFF' },
+    { label: '⌛ Wasted Time', f: '=$G$38', fmt: '0.0" h"', bg: '#ff1500', fg: '#FFFFFF' },
+    { label: '🏆 Productivity Score', f: '=$H$48', fmt: '0" / 100"', bg: '#4F46E5', fg: '#FFFFFF' },
   ];
   const cardCols = [2, 6, 10, 14];   // B, F, J, N — each card spans 3 columns
   cards.forEach((c, i) => {
@@ -457,7 +518,7 @@ function buildDashboardSheet(ss) {
       .setHorizontalAlignment('center').setVerticalAlignment('middle');
   });
 
-  /* ─────────── MONTHLY SUMMARY BY ACTIVITY (rows 13–21) ─────────── */
+  /* ─────────── MONTHLY SUMMARY BY ACTIVITY (rows 13–27) ─────────── */
 
   sectionBar(sh, 13, 2, 10, '📊 Monthly Summary by Activity  (auto-collected from Weeks 1–4)');
 
@@ -470,8 +531,8 @@ function buildDashboardSheet(ss) {
     .setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
 
   ACTIVITIES.forEach((a, i) => {
-    const r = 15 + i;
-    sh.setRowHeight(r, 26);
+    const r = 15 + i;                            // rows 15–26
+    sh.setRowHeight(r, 24);
     sh.getRange(r, 2).setValue(a.emoji + ' ' + a.name).setFontWeight('bold').setBackground('#FFFFFF');
     for (let wk = 1; wk <= 4; wk++) {
       sh.getRange(r, 2 + wk)
@@ -486,99 +547,136 @@ function buildDashboardSheet(ss) {
       .setFormula('=IFERROR(SPARKLINE(C' + r + ':F' + r + ',{"charttype","line";"linewidth",2;"color","' + a.color + '"}),"")')
       .setBackground('#FFFFFF');
   });
-  sh.setRowHeight(21, 26);
-  sh.getRange(21, 2).setValue('Σ Total Tracked').setFontWeight('bold').setBackground(THEME.totalRow);
+  sh.setRowHeight(27, 26);
+  sh.getRange(27, 2).setValue('Σ Total Tracked').setFontWeight('bold').setBackground(THEME.totalRow);
   for (let c = 3; c <= 7; c++) {
     const L = colA1(c);
-    sh.getRange(21, c).setFormula('=SUM(' + L + '15:' + L + '20)').setNumberFormat('0.0')
+    sh.getRange(27, c).setFormula('=SUM(' + L + '15:' + L + '26)').setNumberFormat('0.0')
       .setFontWeight('bold').setBackground(THEME.totalRow).setHorizontalAlignment('center');
   }
-  sh.getRange(21, 8).setFormula('=$G$21/672').setNumberFormat('0.0%')
+  sh.getRange(27, 8).setFormula('=$G$27/672').setNumberFormat('0.0%')
     .setFontWeight('bold').setBackground(THEME.totalRow).setHorizontalAlignment('center');
-  sh.getRange(21, 9, 1, 2).merge().setBackground(THEME.totalRow);
-  sh.getRange(14, 2, 8, 9).setBorder(true, true, true, true, true, true,
+  sh.getRange(27, 9, 1, 2).merge().setBackground(THEME.totalRow);
+  sh.getRange(14, 2, 14, 9).setBorder(true, true, true, true, true, true,
     THEME.border, SpreadsheetApp.BorderStyle.SOLID);
 
-  /* ─────────── WEEKLY TOTALS — transposed chart feed (rows 23–28) ─────────── */
+  /* ─────────── GROUP SUMMARY (rows 29–38) ─────────── */
 
-  sectionBar(sh, 23, 2, 8, '📅 Weekly Totals by Activity  (auto — feeds the trend charts)');
-  sh.getRange(24, 2, 1, 7)
+  sectionBar(sh, 29, 2, 10, '📦 Group Summary  (Programming, English, Exercises, Meditate, …)');
+  sh.getRange(30, 2, 1, 7)
+    .setValues([['Group', 'Week 1', 'Week 2', 'Week 3', 'Week 4', 'Σ Total', '% of Month']]);
+  sh.getRange(30, 9, 1, 2).merge().setValue('Trend');
+  sh.getRange(30, 2, 1, 9)
+    .setBackground(THEME.subHead).setFontColor(THEME.subHeadText).setFontWeight('bold')
+    .setHorizontalAlignment('center').setVerticalAlignment('middle')
+    .setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
+
+  GROUPS.forEach((g, i) => {
+    const r = 31 + i;                            // rows 31–38
+    sh.setRowHeight(r, 24);
+    sh.getRange(r, 2).setValue(g.emoji + ' ' + g.name).setFontWeight('bold').setBackground('#FFFFFF');
+    for (let wk = 1; wk <= 4; wk++) {
+      const L = colA1(2 + wk);
+      sh.getRange(r, 2 + wk)
+        .setFormula('=' + g.members.map(m => L + (15 + m)).join('+'))
+        .setNumberFormat('0.0').setBackground('#FFFFFF').setHorizontalAlignment('center');
+    }
+    sh.getRange(r, 7).setFormula('=SUM(C' + r + ':F' + r + ')').setNumberFormat('0.0')
+      .setFontWeight('bold').setBackground('#FFFFFF').setHorizontalAlignment('center');
+    sh.getRange(r, 8).setFormula('=$G$' + r + '/672').setNumberFormat('0.0%')
+      .setFontColor(THEME.muted).setBackground('#FFFFFF').setHorizontalAlignment('center');
+    sh.getRange(r, 9, 1, 2).merge()
+      .setFormula('=IFERROR(SPARKLINE(C' + r + ':F' + r + ',{"charttype","line";"linewidth",2;"color","' + g.color + '"}),"")')
+      .setBackground('#FFFFFF');
+  });
+  sh.getRange(30, 2, 9, 9).setBorder(true, true, true, true, true, true,
+    THEME.border, SpreadsheetApp.BorderStyle.SOLID);
+
+  /* ─────────── WEEKLY TOTALS — transposed chart feed (rows 40–45) ─────────── */
+
+  sectionBar(sh, 40, 2, 14, '📅 Weekly Totals by Activity  (auto — feeds the trend charts)');
+  sh.getRange(41, 2, 1, 13)
     .setValues([['Week'].concat(ACTIVITIES.map(a => a.emoji + ' ' + a.name))])
     .setBackground(THEME.subHead).setFontColor(THEME.subHeadText).setFontWeight('bold')
     .setFontSize(9).setHorizontalAlignment('center').setVerticalAlignment('middle')
     .setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
   for (let wk = 1; wk <= 4; wk++) {
-    const r = 24 + wk;
+    const r = 41 + wk;                           // rows 42–45
     sh.getRange(r, 2).setValue('Week ' + wk).setFontWeight('bold').setBackground('#FFFFFF');
     ACTIVITIES.forEach((a, j) => {
-      // pulls from the summary table above: activity row 15+j, week column C..F
+      // pulls from the activity summary: activity row 15+j, week column C..F
       sh.getRange(r, 3 + j).setFormula('=' + colA1(2 + wk) + (15 + j))
         .setNumberFormat('0.0').setBackground('#FFFFFF').setHorizontalAlignment('center');
     });
   }
-  sh.getRange(24, 2, 5, 7).setBorder(true, true, true, true, true, true,
+  sh.getRange(41, 2, 5, 13).setBorder(true, true, true, true, true, true,
     THEME.border, SpreadsheetApp.BorderStyle.SOLID);
 
-  /* ─────────── KEY METRICS + PRODUCTIVITY SCORE (rows 30–37) ─────────── */
+  /* ─────────── KEY METRICS + PRODUCTIVITY SCORE (rows 47–54) ─────────── */
 
-  sectionBar(sh, 30, 2, 6, '📌 Key Metrics');
+  sectionBar(sh, 47, 2, 6, '📌 Key Metrics');
   const metrics = [
-    ['⏱️ Total Tracked Hours',            '=$G$21',                        '0.0" h"'],
-    ['⚡ Avg Productive Hours / Day',      '=($G$16+$G$17+$G$18+$G$19)/28', '0.00" h"'],
-    ['😴 Avg Sleep / Day',                 '=$G$15/28',                     '0.00" h"'],
-    ['💻 Programming % (of tracked)',      '=IFERROR($G$16/$G$21,0)',       '0.0%'],
-    ['🏋️ Exercise % (of tracked)',         '=IFERROR($G$17/$G$21,0)',       '0.0%'],
-    ['🧘 Meditation % (of tracked)',       '=IFERROR($G$18/$G$21,0)',       '0.0%'],
-    ['⌛ Wasted Time % (of tracked)',      '=IFERROR($G$20/$G$21,0)',       '0.0%'],
+    ['⏱️ Total Tracked Hours',        '=$G$27',                                        '0.0" h"'],
+    ['⚡ Avg Productive Hours / Day',  '=($G$31+$G$32+$G$33+$G$34+$G$35+$G$36)/28',     '0.00" h"'],
+    ['😴 Avg Sleep / Day',             '=$G$37/28',                                     '0.00" h"'],
+    ['💻 Programming % (of tracked)',  '=IFERROR($G$31/$G$27,0)',                       '0.0%'],
+    ['📚 English % (of tracked)',      '=IFERROR($G$32/$G$27,0)',                       '0.0%'],
+    ['🏋️ Exercises % (of tracked)',    '=IFERROR($G$33/$G$27,0)',                       '0.0%'],
+    ['⌛ Wasted Time % (of tracked)',  '=IFERROR($G$38/$G$27,0)',                       '0.0%'],
   ];
   metrics.forEach((m, i) => {
-    const r = 31 + i;
+    const r = 48 + i;                            // rows 48–54
     sh.setRowHeight(r, 25);
     sh.getRange(r, 2, 1, 3).merge().setValue(m[0]).setBackground('#FFFFFF').setVerticalAlignment('middle');
     sh.getRange(r, 5, 1, 2).merge().setFormula(m[1]).setNumberFormat(m[2])
       .setFontWeight('bold').setBackground('#FFFFFF')
       .setHorizontalAlignment('center').setVerticalAlignment('middle');
   });
-  sh.getRange(31, 2, 7, 5).setBorder(true, true, true, true, true, true,
+  sh.getRange(48, 2, 7, 5).setBorder(true, true, true, true, true, true,
     THEME.border, SpreadsheetApp.BorderStyle.SOLID);
 
-  sectionBar(sh, 30, 8, 13, '🏆 Productivity Score');
-  sh.getRange(31, 8, 3, 3).merge()
+  sectionBar(sh, 47, 8, 13, '🏆 Productivity Score');
+  sh.getRange(48, 8, 3, 3).merge()
     .setFormula(
       '=ROUND(MAX(0,' +
-      ' MIN(1,$G$16/GOAL_PROG)*35' +
-      ' + MIN(1,$G$17/GOAL_EXERCISE)*15' +
-      ' + MIN(1,$G$18/GOAL_MEDITATION)*10' +
-      ' + MIN(1,$G$19/GOAL_PERSONAL)*10' +
-      ' + MAX(0,1-ABS($G$15/28-IDEAL_SLEEP)/4)*30' +
-      ' - MIN(1,$G$20/WASTED_LIMIT)*25),0)')
+      ' MIN(1,$G$31/GOAL_PROG)*25' +
+      ' + MIN(1,$G$32/GOAL_ENGLISH)*15' +
+      ' + MIN(1,$G$33/GOAL_EXERCISE)*12' +
+      ' + MIN(1,$G$34/GOAL_MEDITATION)*8' +
+      ' + MIN(1,$G$35/GOAL_WORK)*10' +
+      ' + MIN(1,$G$36/GOAL_PERSONAL)*5' +
+      ' + MAX(0,1-ABS($G$37/28-IDEAL_SLEEP)/4)*25' +
+      ' - MIN(1,$G$38/WASTED_LIMIT)*25),0)')
     .setNumberFormat('0')
     .setBackground('#4F46E5').setFontColor('#FFFFFF').setFontSize(30).setFontWeight('bold')
     .setHorizontalAlignment('center').setVerticalAlignment('middle')
     .setNote('Score out of 100:\n' +
-      '• Programming vs goal → 35 pts\n• Exercise vs goal → 15 pts\n' +
-      '• Meditation vs goal → 10 pts\n• Personal tasks vs goal → 10 pts\n' +
-      '• Healthy sleep (near ideal/day) → 30 pts\n• Wasted time → up to −25 pts\n\n' +
+      '• Programming (codding + learn-prog) vs goal → 25 pts\n' +
+      '• English (En-book + En-listening) vs goal → 15 pts\n' +
+      '• Exercises (Run + Gym) vs goal → 12 pts\n' +
+      '• Meditate (Meditation + Setar) vs goal → 8 pts\n' +
+      '• Work vs goal → 10 pts\n• Personal Tasks vs goal → 5 pts\n' +
+      '• Healthy sleep (near ideal/day) → 25 pts\n• Wasted time → up to −25 pts\n\n' +
       'Goals are editable on the hidden "⚙️ Config" sheet\n(right-click a tab ▸ Show sheet).');
-  sh.getRange(31, 11, 1, 3).merge()
-    .setFormula('=IFERROR(SPARKLINE($H$31,{"charttype","bar";"max",100;"color1","#22C55E"}),"")')
+  sh.getRange(48, 11, 1, 3).merge()
+    .setFormula('=IFERROR(SPARKLINE($H$48,{"charttype","bar";"max",100;"color1","#22C55E"}),"")')
     .setBackground('#FFFFFF').setVerticalAlignment('middle');
-  sh.getRange(32, 11, 1, 3).merge().setValue('out of 100').setFontColor(THEME.muted)
+  sh.getRange(49, 11, 1, 3).merge().setValue('out of 100').setFontColor(THEME.muted)
     .setFontSize(9).setBackground('#FFFFFF').setHorizontalAlignment('center').setVerticalAlignment('middle');
-  sh.getRange(33, 11, 1, 3).merge()
-    .setFormula('=IFS($H$31>=85,"🌟 Outstanding",$H$31>=70,"💪 Strong",$H$31>=50,"🙂 Decent",$H$31>=30,"⚠️ Needs Focus",TRUE,"🔴 Off Track")')
+  sh.getRange(50, 11, 1, 3).merge()
+    .setFormula('=IFS($H$48>=85,"🌟 Outstanding",$H$48>=70,"💪 Strong",$H$48>=50,"🙂 Decent",$H$48>=30,"⚠️ Needs Focus",TRUE,"🔴 Off Track")')
     .setFontWeight('bold').setBackground('#FFFFFF')
     .setHorizontalAlignment('center').setVerticalAlignment('middle');
-  sh.getRange(31, 8, 3, 6).setBorder(true, true, true, true, false, false,
+  sh.getRange(48, 8, 3, 6).setBorder(true, true, true, true, false, false,
     THEME.border, SpreadsheetApp.BorderStyle.SOLID);
 
-  /* ─────────── MONTHLY REFLECTION (rows 107–137) ─────────── */
+  /* ─────────── MONTHLY REFLECTION (rows 139–169) ─────────── */
 
-  sectionBar(sh, 107, 2, 10, '🗓️ Monthly Reflection');
+  sectionBar(sh, 139, 2, 10, '🗓️ Monthly Reflection');
   const monthlyRefl = ['🏆 Biggest Achievement', '⚠️ Biggest Mistake', '📈 Habits That Improved',
                        '📉 Habits That Hurt My Productivity', '🎯 Goals for Next Month', '📝 Notes'];
   monthlyRefl.forEach((t, i) => {
-    const r = 109 + i * 5;
+    const r = 141 + i * 5;
     sh.getRange(r, 2, 1, 9).merge().setValue(t)
       .setBackground(THEME.subHead).setFontColor(THEME.subHeadText)
       .setFontWeight('bold').setVerticalAlignment('middle');
@@ -590,35 +688,43 @@ function buildDashboardSheet(ss) {
   });
 
   // gauge chart feed (kept out of sight — text color matches the background)
-  sh.getRange(147, 2).setValue('Metric').setFontColor(THEME.bg);
-  sh.getRange(147, 3).setValue('Score').setFontColor(THEME.bg);
-  sh.getRange(148, 2).setValue('Productivity').setFontColor(THEME.bg);
-  sh.getRange(148, 3).setFormula('=$H$31').setFontColor(THEME.bg);
+  sh.getRange(172, 2).setValue('Metric').setFontColor(THEME.bg);
+  sh.getRange(172, 3).setValue('Score').setFontColor(THEME.bg);
+  sh.getRange(173, 2).setValue('Productivity').setFontColor(THEME.bg);
+  sh.getRange(173, 3).setFormula('=$H$48').setFontColor(THEME.bg);
 
-  /* ─────────── MONTHLY ANALYTICS — 8 CHARTS (rows 40–105) ─────────── */
+  /* ─────────── MONTHLY ANALYTICS — 10 CHARTS (rows 57–137) ─────────── */
+  // transposed helper columns: C codding, D learn-prog, E En-book, F En-listening,
+  // G Run, H Gym, I work, J Meditation, K Setar, L Personal, M Wasted, N Sleep
 
-  sectionBar(sh, 40, 2, 19, '📈 Monthly Analytics');
-  const wkCat = 'B24:B28';
+  sectionBar(sh, 57, 2, 19, '📈 Monthly Analytics');
+  const wkCat = 'B41:B45';
   addCharts(sh, [
-    { title: '📊 Weekly Comparison by Activity', ranges: ['B14:F20'], type: 'column',
-      colors: ['#C7D2FE', '#818CF8', '#4F46E5', '#3730A3'], row: 41, col: 2, legend: 'bottom', vTitle: 'Hours' },
-    { title: '🥧 Monthly Activity Distribution', ranges: ['B15:B20', 'G15:G20'], type: 'pie', headers: 0,
-      colors: ACTIVITIES.map(a => a.color), row: 41, col: 11, legend: 'right' },
-    { title: '💻 Programming Progress (Week 1 → 4)', ranges: [wkCat, 'D24:D28'], type: 'column',
-      colors: ['#34A853'], row: 57, col: 2, vTitle: 'Hours' },
-    { title: '😴 Sleep Trend', ranges: [wkCat, 'C24:C28'], type: 'line',
-      colors: ['#4285F4'], row: 57, col: 11, vTitle: 'Hours' },
-    { title: '🏋️ Exercise Trend', ranges: [wkCat, 'E24:E28'], type: 'line',
-      colors: ['#FF8F00'], row: 73, col: 2, vTitle: 'Hours' },
-    { title: '🧘 Meditation Trend', ranges: [wkCat, 'F24:F28'], type: 'line',
-      colors: ['#9C27B0'], row: 73, col: 11, vTitle: 'Hours' },
-    { title: '⌛ Wasted Time Trend', ranges: [wkCat, 'H24:H28'], type: 'line',
-      colors: ['#EA4335'], row: 89, col: 2, vTitle: 'Hours' },
-    { title: '🏆 Productivity Score', ranges: ['B147:C148'], gauge: true, headers: 1, row: 89, col: 11,
+    { title: '📊 Weekly Comparison by Group', ranges: ['B30:F38'], type: 'column',
+      colors: ['#C7D2FE', '#818CF8', '#4F46E5', '#3730A3'], row: 58, col: 2, legend: 'bottom', vTitle: 'Hours' },
+    { title: '🥧 Monthly Distribution by Group', ranges: ['B31:B38', 'G31:G38'], type: 'pie', headers: 0,
+      colors: GROUPS.map(g => g.color), row: 58, col: 11, legend: 'right' },
+    { title: '💻 Programming Progress — codding + learn-prog (W1→4)', ranges: [wkCat, 'C41:D45'], type: 'column',
+      stacked: true, colors: ['#057c31', '#86EFAC'], row: 74, col: 2, legend: 'bottom', vTitle: 'Hours' },
+    { title: '📚 English Progress — En-book + En-listening (W1→4)', ranges: [wkCat, 'E41:F45'], type: 'column',
+      stacked: true, colors: ['#2563EB', '#93C5FD'], row: 74, col: 11, legend: 'bottom', vTitle: 'Hours' },
+    { title: '🏋️ Exercises Progress — Run + Gym (W1→4)', ranges: [wkCat, 'G41:H45'], type: 'column',
+      stacked: true, colors: ['#EA580C', '#FDBA74'], row: 90, col: 2, legend: 'bottom', vTitle: 'Hours' },
+    { title: '🧘 Meditate Progress — Meditation + Setar (W1→4)', ranges: [wkCat, 'J41:K45'], type: 'column',
+      stacked: true, colors: ['#8e029b', '#da87de'], row: 90, col: 11, legend: 'bottom', vTitle: 'Hours' },
+    { title: '🧑‍💻 Work Trend', ranges: [wkCat, 'I41:I45'], type: 'line',
+      colors: ['#89fd05'], row: 106, col: 2, vTitle: 'Hours' },
+    { title: '😴 Sleep Trend', ranges: [wkCat, 'N41:N45'], type: 'line',
+      colors: ['#4e4d44'], row: 106, col: 11, vTitle: 'Hours' },
+    { title: '⌛ Wasted Time Trend', ranges: [wkCat, 'M41:M45'], type: 'line',
+      colors: ['#ff1500'], row: 122, col: 2, vTitle: 'Hours' },
+    { title: '🏆 Productivity Score', ranges: ['B172:C173'], gauge: true, headers: 1, row: 122, col: 11,
       opts: { min: 0, max: 100, redFrom: 0, redTo: 40, yellowFrom: 40, yellowTo: 70, greenFrom: 70, greenTo: 100 } },
   ]);
 
-  sh.setFrozenRows(2);
+  // no frozen rows or columns anywhere
+  sh.setFrozenRows(0);
+  sh.setFrozenColumns(0);
   return sh;
 }
 
