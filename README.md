@@ -1,10 +1,22 @@
 <div align="center">
 
-# ✍️📝  Sheets Time Tracker
-
-![Hand writing time tracker](screenshots/handwrite.jpg)
-
 # ⏱️ Premium Google Sheets Time Tracker
+
+## 💡 Project Origin
+
+Before building this automated Google Sheets Time Tracker, I spent **approximately seven months** tracking my time manually using hand-drawn tables.
+
+Every week, I created these schedules by hand to monitor my daily activities, analyze my productivity, and improve my habits. Over time, I realized how repetitive and time-consuming the manual process was.
+
+The experience of using this system every day helped me refine the workflow and inspired the idea for this project.
+
+The current Google Sheets version is the result of transforming that original paper-based system into a **fully automated, interactive, and visually polished productivity dashboard**, while preserving the core methodology that I personally developed and tested over several months.
+
+### 📝 Original Hand-Drawn Time Tracker
+
+![Original Hand-Drawn Time Tracker](screenshots/handwrite.jpg)
+
+# ⏱  Google Sheets Time Tracker
 
 ### 🚀 A Fully Automated Productivity Dashboard Built with Google Apps Script
 
