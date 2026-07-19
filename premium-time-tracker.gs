@@ -1,5 +1,5 @@
 /** ═══════════════════════════════════════════════════════════════════════════
- *  ⏱️  PREMIUM TIME TRACKER — automated Google Sheets builder  (v2.1.0)
+ *  ⏱️  PREMIUM TIME TRACKER — automated Google Sheets builder  (v4)
  *  ───────────────────────────────────────────────────────────────────────────
  *  Builds a complete, fully-automated 5-sheet productivity tracker:
  *    📅 Week 1 … Week 4  — 30-min time grid (Sat–Fri × 48 blocks), dropdowns,
@@ -52,8 +52,7 @@ const GROUPS = [
 ];
 
 // Week starts on Monday; Friday keeps the weekend styling
-//const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-const DAYS = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 const THEME = {
   bg: '#F4F6FB',        banner: '#141E3C',    nav: '#1E2A52',
