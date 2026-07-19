@@ -1,5 +1,5 @@
 /** ═══════════════════════════════════════════════════════════════════════════
- *  ⏱️  PREMIUM TIME TRACKER — automated Google Sheets builder  (v4)
+ *  ⏱️  PREMIUM TIME TRACKER — automated Google Sheets builder  (v2.1.0)
  *  ───────────────────────────────────────────────────────────────────────────
  *  Builds a complete, fully-automated 5-sheet productivity tracker:
  *    📅 Week 1 … Week 4  — 30-min time grid (Sat–Fri × 48 blocks), dropdowns,
