@@ -1,5 +1,5 @@
 /** ═══════════════════════════════════════════════════════════════════════════
- *  ⏱️  PREMIUM TIME TRACKER — automated Google Sheets builder  (v2.0.0)
+ *  ⏱️  PREMIUM TIME TRACKER — automated Google Sheets builder  (v4)
  *  ───────────────────────────────────────────────────────────────────────────
  *  Builds a complete, fully-automated 5-sheet productivity tracker:
  *    📅 Week 1 … Week 4  — 30-min time grid (Sat–Fri × 48 blocks), dropdowns,
@@ -51,7 +51,8 @@ const GROUPS = [
   { name: 'Wasted Time',    emoji: '⌛', members: [10],    color: '#ff1500' },
 ];
 
-// Week starts on Saturday; Friday (last row) is the only weekend day
+// Week starts on Monday; Friday keeps the weekend styling
+//const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const DAYS = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
 const THEME = {
@@ -78,7 +79,7 @@ const DASH_NAME = '📊 Monthly Dashboard';
 const CFG_NAME  = '⚙️ Config';
 const NAMED = ['ACTIVITIES', 'GOAL_PROG', 'GOAL_ENGLISH', 'GOAL_EXERCISE',
                'GOAL_MEDITATION', 'GOAL_WORK', 'GOAL_PERSONAL',
-               'IDEAL_SLEEP', 'WASTED_LIMIT',
+               'IDEAL_SLEEP', 'WASTED_LIMIT', 'MONTH_START',
                'WEEK1_GRID', 'WEEK2_GRID', 'WEEK3_GRID', 'WEEK4_GRID'];
 
 /* ══════════════════════════ MENU ══════════════════════════ */
@@ -156,6 +157,16 @@ function buildConfigSheet(ss) {
     sh.getRange(2 + i, 5).setValue(g[1]).setFontWeight('bold');
     ss.setNamedRange(g[2], sh.getRange(2 + i, 5));
   });
+  // Week 1 start date — drives the calendar dates shown above each weekday.
+  // Defaults to the Monday of the current week; edit it to shift all dates.
+  const today = new Date();
+  const monday = new Date(today.getFullYear(), today.getMonth(),
+                          today.getDate() - ((today.getDay() + 6) % 7));
+  sh.getRange(10, 4).setValue('Week 1 start date (must be a Monday)');
+  sh.getRange(10, 5).setValue(monday).setNumberFormat('d mmm yyyy').setFontWeight('bold')
+    .setNote('All weekly-sheet dates are computed from this date.\nWeek 2 starts +7 days, Week 3 +14, Week 4 +21.');
+  ss.setNamedRange('MONTH_START', sh.getRange(10, 5));
+
   ss.setNamedRange('ACTIVITIES', sh.getRange('A2:A' + (1 + ACTIVITIES.length)));
 
   sh.setColumnWidth(4, 340);
@@ -169,14 +180,14 @@ function buildWeekSheet(ss, cfg, w) {
   const sh = ss.insertSheet('Week ' + w);
   sh.setTabColor(WEEK_TABS[w - 1]);
 
-  // ---- canvas size: 160 rows × 70 cols ----
+  // ---- canvas size: 172 rows × 70 cols ----
   if (sh.getMaxColumns() < 70) sh.insertColumnsAfter(sh.getMaxColumns(), 70 - sh.getMaxColumns());
   if (sh.getMaxColumns() > 70) sh.deleteColumns(71, sh.getMaxColumns() - 70);
-  if (sh.getMaxRows() > 160) sh.deleteRows(161, sh.getMaxRows() - 160);
-  if (sh.getMaxRows() < 160) sh.insertRowsAfter(sh.getMaxRows(), 160 - sh.getMaxRows());
+  if (sh.getMaxRows() > 172) sh.deleteRows(173, sh.getMaxRows() - 172);
+  if (sh.getMaxRows() < 172) sh.insertRowsAfter(sh.getMaxRows(), 172 - sh.getMaxRows());
 
   sh.setHiddenGridlines(true);
-  sh.getRange(1, 1, 160, 70).setBackground(THEME.bg)
+  sh.getRange(1, 1, 172, 70).setBackground(THEME.bg)
     .setFontFamily(THEME.font).setFontColor('#1F2937').setFontSize(10);
 
   // ---- column widths ----
@@ -196,7 +207,7 @@ function buildWeekSheet(ss, cfg, w) {
   // ---- row heights ----
   sh.setRowHeight(1, 50); sh.setRowHeight(2, 28); sh.setRowHeight(3, 30);
   sh.setRowHeight(4, 26); sh.setRowHeight(5, 22);
-  sh.setRowHeights(6, 7, 34);
+  sh.setRowHeights(6, 7, 36);
   sh.setRowHeight(13, 24); sh.setRowHeight(14, 28); sh.setRowHeight(15, 24);
 
   // ---- banner ----
@@ -234,11 +245,16 @@ function buildWeekSheet(ss, cfg, w) {
     .setBackground('#FFFFFF').setFontColor(THEME.muted).setFontSize(7)
     .setHorizontalAlignment('center');
 
-  // day labels — Friday is the only weekend day
+  // day labels — weekday name + actual calendar date (from MONTH_START on Config);
+  // month transitions are automatic. Friday is the only weekend day.
   DAYS.forEach((d, i) => {
     const c = d === 'Friday' ? THEME.weekend : THEME.weekday;
-    sh.getRange(6 + i, 2).setValue(d).setBackground(c.bg).setFontColor(c.fg)
-      .setFontWeight('bold').setHorizontalAlignment('center').setVerticalAlignment('middle');
+    const off = (w - 1) * 7 + i;
+    sh.getRange(6 + i, 2)
+      .setFormula('="' + d + '"&CHAR(10)&TEXT(MONTH_START+' + off + ',"d mmm")')
+      .setBackground(c.bg).setFontColor(c.fg).setFontWeight('bold').setFontSize(9)
+      .setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP)
+      .setHorizontalAlignment('center').setVerticalAlignment('middle');
   });
 
   // the 336 half-hour cells: white, centered, dropdown-validated
@@ -414,6 +430,56 @@ function buildWeekSheet(ss, cfg, w) {
   sh.getRange(4, 56, 9, 14).setBorder(true, true, true, true, true, true,
     THEME.border, SpreadsheetApp.BorderStyle.SOLID);
 
+  /* ─────────── 7. PRODUCTIVE TIME (right zone, rows 14–28) ─────────── */
+  // Productive = Programming + English + Exercises + Work
+  // (breakdown columns BE..BK are exactly codding…work, so daily sums are contiguous)
+
+  sectionBar(sh, 14, 56, 69, '⚡ Productive Time — Programming + English + Exercises + Work');
+
+  const prodCards = [
+    { c1: 56, w2: 4, label: "⚡ Today's Productive Hours",
+      f: '=IFERROR(INDEX($BE$20:$BE$26,TODAY()-(MONTH_START+' + ((w - 1) * 7) + ')+1),"—")' },
+    { c1: 61, w2: 3, label: 'Σ Week Total', f: '=$BE$27' },
+    { c1: 65, w2: 4, label: '📈 Avg / Day', f: '=$BE$28' },
+  ];
+  prodCards.forEach(pc => {
+    sh.getRange(15, pc.c1, 1, pc.w2).merge().setValue(pc.label)
+      .setBackground('#0D9488').setFontColor('#FFFFFF').setFontSize(9).setFontWeight('bold')
+      .setHorizontalAlignment('center').setVerticalAlignment('middle');
+    sh.getRange(16, pc.c1, 2, pc.w2).merge().setFormula(pc.f).setNumberFormat('0.0" h"')
+      .setBackground('#0D9488').setFontColor('#FFFFFF').setFontSize(18).setFontWeight('bold')
+      .setHorizontalAlignment('center').setVerticalAlignment('middle');
+  });
+  sh.getRange(15, 56).setNote("Shows today's productive hours while this sheet's week is the current week; otherwise —");
+
+  // daily comparison table (rows 19–28) — feeds the productive chart
+  sh.getRange(19, 56).setValue('Day');
+  sh.getRange(19, 57).setValue('⚡ Hours');
+  sh.getRange(19, 58, 1, 3).merge().setValue('Comparison');
+  sh.getRange(19, 56, 1, 5)
+    .setBackground(THEME.subHead).setFontColor(THEME.subHeadText).setFontWeight('bold')
+    .setFontSize(9).setHorizontalAlignment('center').setVerticalAlignment('middle');
+  DAYS.forEach((d, i) => {
+    const r = 20 + i, br = 5 + i;               // table row, breakdown row
+    const c = d === 'Friday' ? THEME.weekend : THEME.weekday;
+    sh.getRange(r, 56).setValue(d).setBackground(c.bg).setFontColor(c.fg).setFontWeight('bold');
+    sh.getRange(r, 57).setFormula('=SUM(BE' + br + ':BK' + br + ')')
+      .setNumberFormat('0.0').setFontWeight('bold').setBackground('#FFFFFF').setHorizontalAlignment('center');
+    sh.getRange(r, 58, 1, 3).merge()
+      .setFormula('=IFERROR(SPARKLINE($BE' + r + ',{"charttype","bar";"max",MAX($BE$20:$BE$26)+0.0001;"color1","#0D9488"}),"")')
+      .setBackground('#FFFFFF').setVerticalAlignment('middle');
+  });
+  sh.getRange(27, 56).setValue('Σ Week').setFontWeight('bold').setBackground(THEME.totalRow);
+  sh.getRange(27, 57).setFormula('=SUM(BE20:BE26)').setNumberFormat('0.0')
+    .setFontWeight('bold').setBackground(THEME.totalRow).setHorizontalAlignment('center');
+  sh.getRange(27, 58, 1, 3).merge().setBackground(THEME.totalRow);
+  sh.getRange(28, 56).setValue('Avg / day').setFontColor(THEME.muted).setBackground('#FFFFFF');
+  sh.getRange(28, 57).setFormula('=BE27/7').setNumberFormat('0.00')
+    .setFontWeight('bold').setBackground('#FFFFFF').setHorizontalAlignment('center');
+  sh.getRange(28, 58, 1, 3).merge().setBackground('#FFFFFF');
+  sh.getRange(19, 56, 10, 5).setBorder(true, true, true, true, true, true,
+    THEME.border, SpreadsheetApp.BorderStyle.SOLID);
+
   /* ─────────── CONDITIONAL FORMATTING ─────────── */
 
   const rules = [];
@@ -459,6 +525,8 @@ function buildWeekSheet(ss, cfg, w) {
       colors: ACTIVITIES.map(a => a.color), row: 136, col: 2, legend: 'right' },
     { title: '📈 Weekly Productivity Trend — how each day was spent', ranges: ['BD4:BP11'], type: 'column',
       stacked: true, colors: ACTIVITIES.map(a => a.color), row: 136, col: 20, legend: 'bottom', vTitle: 'Hours' },
+    { title: '⚡ Daily Productive Hours — Programming + English + Exercises + Work', ranges: ['BD19:BE26'],
+      type: 'column', colors: ['#0D9488'], row: 152, col: 2, vTitle: 'Hours' },
   ]);
 
   return sh;
@@ -470,13 +538,13 @@ function buildDashboardSheet(ss) {
   const sh = ss.insertSheet(DASH_NAME);
   sh.setTabColor('#4F46E5');
 
-  // canvas: 178 rows × 21 cols
+  // canvas: 195 rows × 21 cols
   if (sh.getMaxColumns() > 21) sh.deleteColumns(22, sh.getMaxColumns() - 21);
-  if (sh.getMaxRows() > 178) sh.deleteRows(179, sh.getMaxRows() - 178);
-  if (sh.getMaxRows() < 178) sh.insertRowsAfter(sh.getMaxRows(), 178 - sh.getMaxRows());
+  if (sh.getMaxRows() > 195) sh.deleteRows(196, sh.getMaxRows() - 195);
+  if (sh.getMaxRows() < 195) sh.insertRowsAfter(sh.getMaxRows(), 195 - sh.getMaxRows());
 
   sh.setHiddenGridlines(true);
-  sh.getRange(1, 1, 178, 21).setBackground(THEME.bg)
+  sh.getRange(1, 1, 195, 21).setBackground(THEME.bg)
     .setFontFamily(THEME.font).setFontColor('#1F2937').setFontSize(10);
 
   sh.setColumnWidth(1, 16);
@@ -501,15 +569,17 @@ function buildDashboardSheet(ss) {
     { label: '📚 English',     f: '=$G$32', fmt: '0.0" h"', bg: '#2563EB', fg: '#FFFFFF' },
     { label: '🏋️ Exercises',   f: '=$G$33', fmt: '0.0" h"', bg: '#EA580C', fg: '#FFFFFF' },
     { label: '🧘 Meditate',    f: '=$G$34', fmt: '0.0" h"', bg: '#8e029b', fg: '#FFFFFF' },
+    { label: '⚡ Productive (Month)', f: '=$Q$52', fmt: '0.0" h"', bg: '#0D9488', fg: '#FFFFFF' },
     { label: '🧑‍💻 Work',        f: '=$G$35', fmt: '0.0" h"', bg: '#89fd05', fg: '#FFFFFF' },
     { label: '😴 Sleep',       f: '=$G$37', fmt: '0.0" h"', bg: '#4e4d44', fg: '#FFFFFF' },
     { label: '⌛ Wasted Time', f: '=$G$38', fmt: '0.0" h"', bg: '#ff1500', fg: '#FFFFFF' },
     { label: '🏆 Productivity Score', f: '=$H$48', fmt: '0" / 100"', bg: '#4F46E5', fg: '#FFFFFF' },
+    { label: '⚡ Avg Productive / Day', f: '=$Q$53', fmt: '0.00" h"', bg: '#0F766E', fg: '#FFFFFF' },
   ];
-  const cardCols = [2, 6, 10, 14];   // B, F, J, N — each card spans 3 columns
+  const cardCols = [2, 6, 10, 14, 18];   // B, F, J, N, R — each card spans 3 columns
   cards.forEach((c, i) => {
-    const row = i < 4 ? 4 : 8;
-    const col = cardCols[i % 4];
+    const row = i < 5 ? 4 : 8;
+    const col = cardCols[i % 5];
     sh.getRange(row, col, 1, 3).merge().setValue(c.label)
       .setBackground(c.bg).setFontColor(c.fg).setFontSize(10).setFontWeight('bold')
       .setHorizontalAlignment('center').setVerticalAlignment('middle');
@@ -670,13 +740,48 @@ function buildDashboardSheet(ss) {
   sh.getRange(48, 8, 3, 6).setBorder(true, true, true, true, false, false,
     THEME.border, SpreadsheetApp.BorderStyle.SOLID);
 
-  /* ─────────── MONTHLY REFLECTION (rows 139–169) ─────────── */
+  /* ─────────── PRODUCTIVE TIME (rows 47–54, right block) ─────────── */
+  // Productive = Programming + English + Exercises + Work (group rows 31, 32, 33, 35)
 
-  sectionBar(sh, 139, 2, 10, '🗓️ Monthly Reflection');
+  sectionBar(sh, 47, 15, 20, '⚡ Productive Time');
+  for (let wk = 0; wk < 4; wk++) {
+    const r = 48 + wk;
+    const L = colA1(3 + wk);                    // C..F = Week 1..4
+    sh.setRowHeight(r, 25);
+    sh.getRange(r, 15, 1, 2).merge().setValue('Week ' + (wk + 1))
+      .setFontWeight('bold').setBackground('#FFFFFF').setVerticalAlignment('middle');
+    sh.getRange(r, 17, 1, 2).merge()
+      .setFormula('=' + L + '31+' + L + '32+' + L + '33+' + L + '35')
+      .setNumberFormat('0.0" h"').setFontWeight('bold').setBackground('#FFFFFF')
+      .setHorizontalAlignment('center').setVerticalAlignment('middle');
+    sh.getRange(r, 19, 1, 2).merge()
+      .setFormula('=IFERROR(SPARKLINE($Q$' + r + ',{"charttype","bar";"max",MAX($Q$48:$Q$51)+0.0001;"color1","#0D9488"}),"")')
+      .setBackground('#FFFFFF').setVerticalAlignment('middle');
+  }
+  const prodRows = [
+    [52, 'Σ Month',    '=SUM($Q$48:$Q$51)', '0.0" h"', THEME.totalRow],
+    [53, '⚡ Avg / Day', '=$Q$52/28',        '0.00" h"', '#FFFFFF'],
+    [54, '🏅 Best Week', '=IFERROR("Week "&MATCH(MAX($Q$48:$Q$51),$Q$48:$Q$51,0),"—")', '@', '#FFFFFF'],
+  ];
+  prodRows.forEach(pr => {
+    sh.setRowHeight(pr[0], 25);
+    sh.getRange(pr[0], 15, 1, 2).merge().setValue(pr[1])
+      .setFontWeight('bold').setBackground(pr[4]).setVerticalAlignment('middle');
+    sh.getRange(pr[0], 17, 1, 2).merge().setFormula(pr[2]).setNumberFormat(pr[3])
+      .setFontWeight('bold').setBackground(pr[4])
+      .setHorizontalAlignment('center').setVerticalAlignment('middle');
+    sh.getRange(pr[0], 19, 1, 2).merge().setBackground(pr[4]);
+  });
+  sh.getRange(48, 15, 7, 6).setBorder(true, true, true, true, true, true,
+    THEME.border, SpreadsheetApp.BorderStyle.SOLID);
+
+  /* ─────────── MONTHLY REFLECTION (rows 155–185) ─────────── */
+
+  sectionBar(sh, 155, 2, 10, '🗓️ Monthly Reflection');
   const monthlyRefl = ['🏆 Biggest Achievement', '⚠️ Biggest Mistake', '📈 Habits That Improved',
                        '📉 Habits That Hurt My Productivity', '🎯 Goals for Next Month', '📝 Notes'];
   monthlyRefl.forEach((t, i) => {
-    const r = 141 + i * 5;
+    const r = 157 + i * 5;
     sh.getRange(r, 2, 1, 9).merge().setValue(t)
       .setBackground(THEME.subHead).setFontColor(THEME.subHeadText)
       .setFontWeight('bold').setVerticalAlignment('middle');
@@ -688,12 +793,12 @@ function buildDashboardSheet(ss) {
   });
 
   // gauge chart feed (kept out of sight — text color matches the background)
-  sh.getRange(172, 2).setValue('Metric').setFontColor(THEME.bg);
-  sh.getRange(172, 3).setValue('Score').setFontColor(THEME.bg);
-  sh.getRange(173, 2).setValue('Productivity').setFontColor(THEME.bg);
-  sh.getRange(173, 3).setFormula('=$H$48').setFontColor(THEME.bg);
+  sh.getRange(188, 2).setValue('Metric').setFontColor(THEME.bg);
+  sh.getRange(188, 3).setValue('Score').setFontColor(THEME.bg);
+  sh.getRange(189, 2).setValue('Productivity').setFontColor(THEME.bg);
+  sh.getRange(189, 3).setFormula('=$H$48').setFontColor(THEME.bg);
 
-  /* ─────────── MONTHLY ANALYTICS — 10 CHARTS (rows 57–137) ─────────── */
+  /* ─────────── MONTHLY ANALYTICS — 11 CHARTS (rows 57–153) ─────────── */
   // transposed helper columns: C codding, D learn-prog, E En-book, F En-listening,
   // G Run, H Gym, I work, J Meditation, K Setar, L Personal, M Wasted, N Sleep
 
@@ -718,7 +823,9 @@ function buildDashboardSheet(ss) {
       colors: ['#4e4d44'], row: 106, col: 11, vTitle: 'Hours' },
     { title: '⌛ Wasted Time Trend', ranges: [wkCat, 'M41:M45'], type: 'line',
       colors: ['#ff1500'], row: 122, col: 2, vTitle: 'Hours' },
-    { title: '🏆 Productivity Score', ranges: ['B172:C173'], gauge: true, headers: 1, row: 122, col: 11,
+    { title: '⚡ Productive Hours by Week — which week won?', ranges: ['O48:O51', 'Q48:Q51'], type: 'column',
+      headers: 0, colors: ['#0D9488'], row: 138, col: 2, vTitle: 'Hours' },
+    { title: '🏆 Productivity Score', ranges: ['B188:C189'], gauge: true, headers: 1, row: 122, col: 11,
       opts: { min: 0, max: 100, redFrom: 0, redTo: 40, yellowFrom: 40, yellowTo: 70, greenFrom: 70, greenTo: 100 } },
   ]);
 
