@@ -1,5 +1,5 @@
 /** ═══════════════════════════════════════════════════════════════════════════
- *  ⏱️  PREMIUM TIME TRACKER — automated Google Sheets builder  (v2.1.1)
+ *  ⏱️  PREMIUM TIME TRACKER — automated Google Sheets builder  (v5)
  *  ───────────────────────────────────────────────────────────────────────────
  *  Builds a complete, fully-automated 5-sheet productivity tracker:
  *    📅 Week 1 … Week 4  — 30-min time grid (Sat–Fri × 48 blocks), dropdowns,
@@ -179,14 +179,14 @@ function buildWeekSheet(ss, cfg, w) {
   const sh = ss.insertSheet('Week ' + w);
   sh.setTabColor(WEEK_TABS[w - 1]);
 
-  // ---- canvas size: 172 rows × 70 cols ----
+  // ---- canvas size: 246 rows × 70 cols ----
   if (sh.getMaxColumns() < 70) sh.insertColumnsAfter(sh.getMaxColumns(), 70 - sh.getMaxColumns());
   if (sh.getMaxColumns() > 70) sh.deleteColumns(71, sh.getMaxColumns() - 70);
-  if (sh.getMaxRows() > 172) sh.deleteRows(173, sh.getMaxRows() - 172);
-  if (sh.getMaxRows() < 172) sh.insertRowsAfter(sh.getMaxRows(), 172 - sh.getMaxRows());
+  if (sh.getMaxRows() > 246) sh.deleteRows(247, sh.getMaxRows() - 246);
+  if (sh.getMaxRows() < 246) sh.insertRowsAfter(sh.getMaxRows(), 246 - sh.getMaxRows());
 
   sh.setHiddenGridlines(true);
-  sh.getRange(1, 1, 172, 70).setBackground(THEME.bg)
+  sh.getRange(1, 1, 246, 70).setBackground(THEME.bg)
     .setFontFamily(THEME.font).setFontColor('#1F2937').setFontSize(10);
 
   // ---- column widths ----
@@ -437,7 +437,8 @@ function buildWeekSheet(ss, cfg, w) {
 
   const prodCards = [
     { c1: 56, w2: 4, label: "⚡ Today's Productive Hours",
-      f: '=IFERROR(INDEX($BE$20:$BE$26,TODAY()-(MONTH_START+' + ((w - 1) * 7) + ')+1),"—")' },
+      f: '=IF(AND(TODAY()>=MONTH_START+' + ((w - 1) * 7) + ',TODAY()<=MONTH_START+' + ((w - 1) * 7 + 6) + '),' +
+         'INDEX($BE$20:$BE$26,TODAY()-(MONTH_START+' + ((w - 1) * 7) + ')+1),"—")' },
     { c1: 61, w2: 3, label: 'Σ Week Total', f: '=$BE$27' },
     { c1: 65, w2: 4, label: '📈 Avg / Day', f: '=$BE$28' },
   ];
@@ -478,6 +479,141 @@ function buildWeekSheet(ss, cfg, w) {
   sh.getRange(28, 58, 1, 3).merge().setBackground('#FFFFFF');
   sh.getRange(19, 56, 10, 5).setBorder(true, true, true, true, true, true,
     THEME.border, SpreadsheetApp.BorderStyle.SOLID);
+
+  /* ─────────── 8. WEEKLY HEALTH TRACKER (right zone, rows 30–53) ─────────── */
+
+  const HEALTH = [
+    { label: '💧 Water',  fmt: '0.0" L"',  afmt: '0.00" L"',  color: '#0EA5E9', vTitle: 'Liters' },
+    { label: '🍬 Sugar',  fmt: '0" g"',    afmt: '0.0" g"',   color: '#EC4899', vTitle: 'Grams' },
+    { label: '🥑 Fat ',    fmt: '0"%"',     afmt: '0.0"%"',    color: '#F59E0B', vTitle: '%' },
+    { label: '🏋️ Sit-ups',       fmt: '0',        afmt: '0.0',       color: '#EA580C', vTitle: 'Reps' },
+    { label: '💪 Push-ups',      fmt: '0',        afmt: '0.0',       color: '#F97316', vTitle: 'Reps' },
+    { label: '🧱 Plank',         fmt: '0" s"',    afmt: '0.0" s"',   color: '#64748B', vTitle: 'Seconds' },
+    { label: '🪢 Jump',     fmt: '0" min"',  afmt: '0.0" min"', color: '#10B981', vTitle: 'Minutes' },
+  ];
+
+  sectionBar(sh, 30, 56, 64, '❤️ Weekly Health Tracker  (enter values manually)');
+  sh.getRange(31, 56).setValue('Metric');
+  DAYS.forEach((d, i) => sh.getRange(31, 57 + i).setValue(d));
+  sh.getRange(31, 64).setValue('Ø Avg');
+  sh.getRange(31, 56, 1, 9)
+    .setBackground(THEME.subHead).setFontColor(THEME.subHeadText).setFontWeight('bold')
+    .setFontSize(9).setHorizontalAlignment('center').setVerticalAlignment('middle')
+    .setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
+  HEALTH.forEach((m, j) => {
+    const r = 32 + j;                            // rows 32–38 (entry rows)
+    sh.getRange(r, 56).setValue(m.label).setFontWeight('bold').setBackground('#FFFFFF');
+    sh.getRange(r, 57, 1, 7).setBackground('#FFFFFF').setNumberFormat(m.fmt)
+      .setHorizontalAlignment('center').setVerticalAlignment('middle');
+    sh.getRange(r, 64).setFormula('=IFERROR(AVERAGE(BE' + r + ':BK' + r + '),"—")')
+      .setNumberFormat(m.afmt).setFontWeight('bold').setBackground(THEME.totalRow)
+      .setHorizontalAlignment('center').setVerticalAlignment('middle');
+  });
+  sh.getRange(32, 57).setNote('❤️ Type your daily health values here.\nAverages and the health charts update automatically.');
+  sh.getRange(31, 56, 8, 9).setBorder(true, true, true, true, true, true,
+    THEME.border, SpreadsheetApp.BorderStyle.SOLID);
+
+  // tooth brushing — three independent checkboxes per day
+  sh.getRange(40, 56, 1, 9).merge().setValue('🪥 Tooth Brushing  (✓ each time you brush)')
+    .setBackground(THEME.subHead).setFontColor(THEME.subHeadText).setFontWeight('bold')
+    .setFontSize(9).setVerticalAlignment('middle');
+  ['🪥 Morning', '🪥 Afternoon', '🪥 Night'].forEach((t, i) => {
+    const r = 41 + i;                            // rows 41–43
+    sh.getRange(r, 56).setValue(t).setFontWeight('bold').setBackground('#FFFFFF');
+    sh.getRange(r, 57, 1, 7).insertCheckboxes().setBackground('#FFFFFF')
+      .setHorizontalAlignment('center').setVerticalAlignment('middle');
+    sh.getRange(r, 64).setFormula('=COUNTIF(BE' + r + ':BK' + r + ',TRUE)&" / 7"')
+      .setFontWeight('bold').setBackground(THEME.totalRow)
+      .setHorizontalAlignment('center').setVerticalAlignment('middle');
+  });
+  sh.getRange(40, 56, 4, 9).setBorder(true, true, true, true, true, true,
+    THEME.border, SpreadsheetApp.BorderStyle.SOLID);
+
+  // transposed feed for the health charts (days as rows)
+  sh.getRange(45, 56, 1, 8).merge().setValue('📈 Health chart feed  (auto)')
+    .setBackground(THEME.subHead).setFontColor(THEME.subHeadText).setFontWeight('bold')
+    .setFontSize(9).setVerticalAlignment('middle');
+  sh.getRange(46, 56).setValue('Day');
+  HEALTH.forEach((m, j) => sh.getRange(46, 57 + j).setValue(m.label));
+  sh.getRange(46, 56, 1, 8)
+    .setBackground(THEME.subHead).setFontColor(THEME.subHeadText).setFontWeight('bold')
+    .setFontSize(9).setHorizontalAlignment('center').setVerticalAlignment('middle')
+    .setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
+  DAYS.forEach((d, i) => {
+    const r = 47 + i;                            // rows 47–53
+    const c = d === 'Friday' ? THEME.weekend : THEME.weekday;
+    sh.getRange(r, 56).setValue(d).setBackground(c.bg).setFontColor(c.fg).setFontWeight('bold');
+    HEALTH.forEach((m, j) => {
+      const src = colA1(57 + i) + (32 + j);      // entry cell: metric row, day column
+      sh.getRange(r, 57 + j).setFormula('=IF(' + src + '="","",' + src + ')')
+        .setNumberFormat('0.0').setBackground('#FFFFFF').setHorizontalAlignment('center');
+    });
+  });
+  sh.getRange(46, 56, 8, 8).setBorder(true, true, true, true, true, true,
+    THEME.border, SpreadsheetApp.BorderStyle.SOLID);
+
+  /* ─────────── 9. DAILY ROUTINE PLANNER (rows 170–183) ─────────── */
+
+  sectionBar(sh, 170, 2, 18, '⏰ Daily Routine Planner  (recurring daily schedule)');
+  [[2, 4, 'Task'], [6, 2, 'Start'], [8, 2, 'End'], [10, 2, 'Duration'], [12, 7, 'Notes (optional)']].forEach(sp => {
+    sh.getRange(171, sp[0], 1, sp[1]).merge().setValue(sp[2])
+      .setBackground(THEME.subHead).setFontColor(THEME.subHeadText).setFontWeight('bold')
+      .setHorizontalAlignment('center').setVerticalAlignment('middle');
+  });
+  const rpExamples = [
+    ['English Study', 8 / 24, 9.5 / 24],
+    ['Programming', 10 / 24, 13 / 24],
+    ['Workout', 18 / 24, 19 / 24],
+    ['Meditation', 22 / 24, (22 * 60 + 20) / 1440],
+  ];
+  for (let i = 0; i < 12; i++) {
+    const r = 172 + i;
+    sh.setRowHeight(r, 24);
+    sh.getRange(r, 2, 1, 4).merge().setBackground('#FFFFFF').setVerticalAlignment('middle');
+    sh.getRange(r, 6, 1, 2).merge().setBackground('#FFFFFF').setNumberFormat('HH:mm')
+      .setHorizontalAlignment('center').setVerticalAlignment('middle');
+    sh.getRange(r, 8, 1, 2).merge().setBackground('#FFFFFF').setNumberFormat('HH:mm')
+      .setHorizontalAlignment('center').setVerticalAlignment('middle');
+    sh.getRange(r, 10, 1, 2).merge()
+      .setFormula('=IF(AND($F$' + r + '<>"",$H$' + r + '<>""),TEXT(MOD($H$' + r + '-$F$' + r + ',1),"[h]:mm"),"")')
+      .setFontWeight('bold').setBackground('#FFFFFF')
+      .setHorizontalAlignment('center').setVerticalAlignment('middle');
+    sh.getRange(r, 12, 1, 7).merge().setBackground('#FFFFFF').setVerticalAlignment('middle');
+    if (i < rpExamples.length) {
+      sh.getRange(r, 2).setValue(rpExamples[i][0]);
+      sh.getRange(r, 6).setValue(rpExamples[i][1]);
+      sh.getRange(r, 8).setValue(rpExamples[i][2]);
+    }
+  }
+  sh.getRange(172, 10).setNote('⏱ Duration is calculated automatically from Start and End.\nOvernight routines (End past midnight) work too.');
+  sh.getRange(171, 2, 13, 17).setBorder(true, true, true, true, true, true,
+    THEME.border, SpreadsheetApp.BorderStyle.SOLID);
+
+  /* ─────────── 10. DAILY JOURNAL (rows 186–243) ─────────── */
+
+  sectionBar(sh, 186, 2, 27, '📝 Daily Journal');
+  DAYS.forEach((d, i) => {
+    const jr = 188 + i * 8;
+    const joff = (w - 1) * 7 + i;
+    const c = d === 'Friday' ? THEME.weekend : THEME.weekday;
+    sh.setRowHeight(jr, 26);
+    sh.getRange(jr, 2, 1, 26).merge()
+      .setFormula('="' + d + '"&"   ·   "&TEXT(MONTH_START+' + joff + ',"d mmm")')
+      .setBackground(c.bg).setFontColor(c.fg).setFontWeight('bold').setVerticalAlignment('middle');
+    sh.getRange(jr + 1, 2, 1, 11).merge().setValue('🕐 What did I spend most of my time on today?')
+      .setBackground(THEME.subHead).setFontColor(THEME.subHeadText).setFontWeight('bold')
+      .setFontSize(9).setVerticalAlignment('middle');
+    sh.getRange(jr + 1, 14, 1, 14).merge().setValue('💡 Today’s Notes')
+      .setBackground(THEME.subHead).setFontColor(THEME.subHeadText).setFontWeight('bold')
+      .setFontSize(9).setVerticalAlignment('middle');
+    [[2, 11], [14, 14]].forEach(sp => {
+      sh.getRange(jr + 2, sp[0], 5, sp[1]).merge().setBackground('#FFFFFF')
+        .setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP)
+        .setVerticalAlignment('top').setHorizontalAlignment('left')
+        .setBorder(true, true, true, true, false, false, THEME.border, SpreadsheetApp.BorderStyle.SOLID)
+        .setNote('✍️ Write here');
+    });
+  });
 
   /* ─────────── CONDITIONAL FORMATTING ─────────── */
 
@@ -526,6 +662,13 @@ function buildWeekSheet(ss, cfg, w) {
       stacked: true, colors: ACTIVITIES.map(a => a.color), row: 136, col: 20, legend: 'bottom', vTitle: 'Hours' },
     { title: '⚡ Daily Productive Hours — Programming + English + Exercises + Work', ranges: ['BD19:BE26'],
       type: 'column', colors: ['#0D9488'], row: 152, col: 2, vTitle: 'Hours' },
+    { title: '💧 Water Intake (Liters)',  ranges: ['BD46:BD53', 'BE46:BE53'], type: 'column', colors: ['#0EA5E9'], row: 56,  col: 52, vTitle: 'Liters' },
+    { title: '🍬 Sugar Intake (Grams)',   ranges: ['BD46:BD53', 'BF46:BF53'], type: 'column', colors: ['#EC4899'], row: 56,  col: 60, vTitle: 'Grams' },
+    { title: '🥑 Fat Intake (%)',         ranges: ['BD46:BD53', 'BG46:BG53'], type: 'column', colors: ['#F59E0B'], row: 72,  col: 52, vTitle: '%' },
+    { title: '🏋️ Sit-ups (Reps)',         ranges: ['BD46:BD53', 'BH46:BH53'], type: 'column', colors: ['#EA580C'], row: 72,  col: 60, vTitle: 'Reps' },
+    { title: '💪 Push-ups (Reps)',        ranges: ['BD46:BD53', 'BI46:BI53'], type: 'column', colors: ['#F97316'], row: 88,  col: 52, vTitle: 'Reps' },
+    { title: '🧱 Plank (Seconds)',        ranges: ['BD46:BD53', 'BJ46:BJ53'], type: 'column', colors: ['#64748B'], row: 88,  col: 60, vTitle: 'Seconds' },
+    { title: '🪢 Jump Rope (Minutes)',    ranges: ['BD46:BD53', 'BK46:BK53'], type: 'column', colors: ['#10B981'], row: 104, col: 52, vTitle: 'Minutes' },
   ]);
 
   return sh;
