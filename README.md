@@ -1,6 +1,6 @@
 <div align="center">
 
-# ⏱️ Premium Google Sheets Time Tracker
+# ⏱️ -Premium Google Sheets Time Tracker
 
 ## 💡 Project Origin
 
